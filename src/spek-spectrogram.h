@@ -19,6 +19,9 @@ public:
     ~SpekSpectrogram();
     void open(const wxString& path, const wxString& pngpath);
     void save(const wxString& path);
+    bool handle_key(int key_code);
+    int get_streams() const { return streams; }
+    int get_channels() const { return channels; }
 
 private:
     void on_char(wxKeyEvent& evt);

@@ -20,8 +20,16 @@ private:
     void on_notify(wxCommandEvent& event);
     void on_visit(wxCommandEvent& event);
     void on_close(wxCommandEvent& event);
+    void add_control(
+        wxWindow *parent, wxSizer *sizer, const wxString& label,
+        const wxString& back_text, const wxString& back_tip, int back_key,
+        const wxString& fwd_text, const wxString& fwd_tip, int fwd_key,
+        wxButton **buttons);
+    void update_controls();
 
     SpekSpectrogram *spectrogram;
+    wxButton *channel_buttons[2];
+    wxButton *stream_buttons[2];
     wxString path;
     wxString pngpath;
     wxString cur_dir;

@@ -80,6 +80,15 @@ On macOS use the Command key instead of Ctrl.
 `w`, `W`
 :   Change the DFT window size.
 
+### Buttons
+
+The bar below the toolbar has a pair of buttons for each of the spectrogram
+keys above: *Channel* (`c`), *Stream* (`s`), *Window* (`f`), *Palette* (`p`),
+*FFT size* (`w`), *Upper dB* (`u`) and *Lower dB* (`l`). The right (`>` or `+`)
+button does what the lowercase key does and the left (`<` or `-`) button does
+what the uppercase key does. Hover over a button to see its key. *Channel* and
+*Stream* are disabled when the file has only one of them.
+
 ## FILES
 
 *~/.config/spek/preferences*

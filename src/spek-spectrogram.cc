@@ -104,6 +104,16 @@ void SpekSpectrogram::on_char(wxKeyEvent& evt)
         return;
     }
 #endif
+    if (!handle_key(key_code)) {
+        evt.Skip();
+    }
+}
+
+// Applies the action bound to a key (lowercase: forward/increase, uppercase:
+// backward/decrease). Used by both the keyboard and the on-screen buttons.
+// Returns false if the key does nothing.
+bool SpekSpectrogram::handle_key(int key_code)
+{
     switch (key_code) {
     case 'c':
         if (this->channels) {
@@ -139,8 +149,7 @@ void SpekSpectrogram::on_char(wxKeyEvent& evt)
     case 's':
         if (this->streams) {
             if (this->streams == 1) {
-                evt.Skip();
-                return;
+                return false;
             }
             this->stream = (this->stream + 1) % this->streams;
         }
@@ -148,8 +157,7 @@ void SpekSpectrogram::on_char(wxKeyEvent& evt)
     case 'S':
         if (this->streams) {
             if (this->streams == 1) {
-                evt.Skip();
-                return;
+                return false;
             }
             this->stream = (this->stream - 1 + this->streams) % this->streams;
         }
@@ -169,12 +177,12 @@ void SpekSpectrogram::on_char(wxKeyEvent& evt)
         this->create_palette();
         break;
     default:
-        evt.Skip();
-        return;
+        return false;
     }
 
     start();
     Refresh();
+    return true;
 }
 
 void SpekSpectrogram::on_paint(wxPaintEvent&)

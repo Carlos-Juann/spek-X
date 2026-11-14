@@ -4,6 +4,7 @@
 #include <wx/filename.h>
 #include <wx/protocol/http.h>
 #include <wx/sstream.h>
+#include <wx/wrapsizer.h>
 
 // WX on WIN doesn't like it when pthread.h is included first.
 #include <pthread.h>
@@ -136,8 +137,54 @@ SpekWindow::SpekWindow(int width, int height, const wxString& path, const wxStri
     info_bar->SetSizer(info_sizer);
     sizer->Add(info_bar, 0, wxEXPAND);
 
+    // Buttons that do the same as the keys handled by the spectrogram.
+    for (int i = 0; i < 2; ++i) {
+        this->channel_buttons[i] = NULL;
+        this->stream_buttons[i] = NULL;
+    }
+    wxPanel *controls = new wxPanel(this);
+    wxSizer *controls_sizer = new wxWrapSizer(wxHORIZONTAL);
+    this->add_control(
+        controls, controls_sizer, _("Channel"),
+        "<", _("Previous channel") + " (Shift+C)", 'C',
+        ">", _("Next channel") + " (C)", 'c',
+        this->channel_buttons);
+    this->add_control(
+        controls, controls_sizer, _("Stream"),
+        "<", _("Previous stream") + " (Shift+S)", 'S',
+        ">", _("Next stream") + " (S)", 's',
+        this->stream_buttons);
+    this->add_control(
+        controls, controls_sizer, _("Window"),
+        "<", _("Previous window function") + " (Shift+F)", 'F',
+        ">", _("Next window function") + " (F)", 'f',
+        NULL);
+    this->add_control(
+        controls, controls_sizer, _("Palette"),
+        "<", _("Previous palette") + " (Shift+P)", 'P',
+        ">", _("Next palette") + " (P)", 'p',
+        NULL);
+    this->add_control(
+        controls, controls_sizer, _("FFT size"),
+        "-", _("Smaller FFT window") + " (Shift+W)", 'W',
+        "+", _("Larger FFT window") + " (W)", 'w',
+        NULL);
+    this->add_control(
+        controls, controls_sizer, _("Upper dB"),
+        "-", _("Lower the upper limit of the range") + " (Shift+U)", 'U',
+        "+", _("Raise the upper limit of the range") + " (U)", 'u',
+        NULL);
+    this->add_control(
+        controls, controls_sizer, _("Lower dB"),
+        "-", _("Lower the lower limit of the range") + " (Shift+L)", 'L',
+        "+", _("Raise the lower limit of the range") + " (L)", 'l',
+        NULL);
+    controls->SetSizer(controls_sizer);
+    sizer->Add(controls, 0, wxEXPAND);
+
     this->spectrogram = new SpekSpectrogram(this);
     sizer->Add(this->spectrogram, 1, wxEXPAND);
+    this->update_controls();
 
     this->cur_dir = wxGetHomeDir();
 
@@ -166,6 +213,59 @@ void SpekWindow::open(const wxString& path)
         SetTitle(title);
 
         this->spectrogram->open(path, this->pngpath);
+        this->update_controls();
+    }
+}
+
+// Adds "label [back] [forward]" to `sizer`. Pressing a button is the same as
+// pressing the key, see SpekSpectrogram::handle_key(). If `buttons` is not NULL,
+// the two buttons are stored there so they can be enabled/disabled later.
+void SpekWindow::add_control(
+    wxWindow *parent, wxSizer *sizer, const wxString& label,
+    const wxString& back_text, const wxString& back_tip, int back_key,
+    const wxString& fwd_text, const wxString& fwd_tip, int fwd_key,
+    wxButton **buttons)
+{
+    wxSizer *group = new wxBoxSizer(wxHORIZONTAL);
+    group->Add(
+        new wxStaticText(parent, wxID_ANY, label),
+        0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+
+    const wxString texts[2] = {back_text, fwd_text};
+    const wxString tips[2] = {back_tip, fwd_tip};
+    const int keys[2] = {back_key, fwd_key};
+    for (int i = 0; i < 2; ++i) {
+        wxButton *button = new wxButton(
+            parent, wxID_ANY, texts[i], wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+        button->SetToolTip(tips[i]);
+        int key = keys[i];
+        button->Bind(wxEVT_BUTTON, [this, key](wxCommandEvent&) {
+            this->spectrogram->handle_key(key);
+            this->update_controls();
+            // Give the focus back so the keyboard keeps working.
+            this->spectrogram->SetFocus();
+        });
+        group->Add(button, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 2);
+        if (buttons) {
+            buttons[i] = button;
+        }
+    }
+
+    sizer->Add(group, 0, wxALL, 4);
+}
+
+// Channel and stream buttons do nothing unless the file has several of them.
+void SpekWindow::update_controls()
+{
+    bool has_channels = this->spectrogram->get_channels() > 1;
+    bool has_streams = this->spectrogram->get_streams() > 1;
+    for (int i = 0; i < 2; ++i) {
+        if (this->channel_buttons[i]) {
+            this->channel_buttons[i]->Enable(has_channels);
+        }
+        if (this->stream_buttons[i]) {
+            this->stream_buttons[i]->Enable(has_streams);
+        }
     }
 }
 

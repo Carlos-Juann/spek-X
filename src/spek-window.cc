@@ -4,7 +4,6 @@
 #include <wx/filename.h>
 #include <wx/protocol/http.h>
 #include <wx/sstream.h>
-#include <wx/wrapsizer.h>
 
 // WX on WIN doesn't like it when pthread.h is included first.
 #include <pthread.h>
@@ -15,6 +14,7 @@
 #include "spek-preferences-dialog.h"
 #include "spek-preferences.h"
 #include "spek-spectrogram.h"
+#include "spek-strip.h"
 
 #include "spek-window.h"
 
@@ -92,29 +92,83 @@ SpekWindow::SpekWindow(int width, int height, const wxString& path, const wxStri
 
     SetMenuBar(menu);
 
-    wxToolBar *toolbar = CreateToolBar();
-    toolbar->AddTool(
-        wxID_OPEN,
-        wxEmptyString,
-        wxArtProvider::GetBitmap(ART_OPEN, wxART_TOOLBAR),
-        menu_file_open->GetItemLabelText()
-    );
-    toolbar->AddTool(
-        wxID_SAVE,
-        wxEmptyString,
-        wxArtProvider::GetBitmap(ART_SAVE, wxART_TOOLBAR),
-        menu_file_save->GetItemLabelText()
-    );
-    toolbar->AddStretchableSpace();
-    toolbar->AddTool(
-        wxID_HELP,
-        wxEmptyString,
-        wxArtProvider::GetBitmap(ART_HELP, wxART_TOOLBAR),
-        _("Help")
-    );
-    toolbar->Realize();
-
     wxSizer *sizer = new wxBoxSizer(wxVERTICAL);
+
+    // The strip at the top: metal buttons and LCD readouts. The readouts do the
+    // same as the keys handled by the spectrogram, see SpekSpectrogram::handle_key().
+    SpekStripPanel *strip = new SpekStripPanel(this);
+    wxSizer *strip_sizer = new wxBoxSizer(wxHORIZONTAL);
+    strip_sizer->AddSpacer(FromDIP(4));
+    strip_sizer->Add(
+        new SpekMetalButton(
+            strip, wxArtProvider::GetBitmap(ART_OPEN, wxART_TOOLBAR),
+            menu_file_open->GetItemLabelText(),
+            [this]() {
+                wxCommandEvent evt(wxEVT_MENU, wxID_OPEN);
+                this->ProcessWindowEvent(evt);
+            }),
+        0, wxEXPAND);
+    strip_sizer->Add(
+        new SpekMetalButton(
+            strip, wxArtProvider::GetBitmap(ART_SAVE, wxART_TOOLBAR),
+            menu_file_save->GetItemLabelText(),
+            [this]() {
+                wxCommandEvent evt(wxEVT_MENU, wxID_SAVE);
+                this->ProcessWindowEvent(evt);
+            }),
+        0, wxEXPAND);
+    strip_sizer->AddSpacer(FromDIP(4));
+
+    // The up button does what the lowercase key does, the down button what
+    // the uppercase one does.
+    auto add_lcd = [&](int index, const wxString& label, const wxString& widest,
+                       const wxString& up_tip, const wxString& down_tip,
+                       int up_key, int down_key) {
+        SpekLcdSpin *lcd = new SpekLcdSpin(
+            strip, label, widest, up_tip, down_tip,
+            [this, up_key, down_key](bool up) {
+                this->spectrogram->handle_key(up ? up_key : down_key);
+            });
+        this->lcds[index] = lcd;
+        strip_sizer->Add(lcd, 0, wxEXPAND | wxLEFT, FromDIP(4));
+    };
+    add_lcd(
+        0, _("Channel"), "CH 1/2",
+        _("Next channel") + " (C)", _("Previous channel") + " (Shift+C)", 'c', 'C');
+    add_lcd(
+        1, _("Stream"), "ST 1/1",
+        _("Next stream") + " (S)", _("Previous stream") + " (Shift+S)", 's', 'S');
+    add_lcd(
+        2, _("Window function"), "BLKH",
+        _("Next window function") + " (F)", _("Previous window function") + " (Shift+F)",
+        'f', 'F');
+    add_lcd(
+        3, _("Palette"), "SPEC",
+        _("Next palette") + " (P)", _("Previous palette") + " (Shift+P)", 'p', 'P');
+    add_lcd(
+        4, _("FFT size"), "FFT 16384",
+        _("Larger FFT window") + " (W)", _("Smaller FFT window") + " (Shift+W)", 'w', 'W');
+    add_lcd(
+        5, _("Upper limit of the range"), "MAX -139",
+        _("Raise the upper limit of the range") + " (U)",
+        _("Lower the upper limit of the range") + " (Shift+U)", 'u', 'U');
+    add_lcd(
+        6, _("Lower limit of the range"), "MIN -140",
+        _("Raise the lower limit of the range") + " (L)",
+        _("Lower the lower limit of the range") + " (Shift+L)", 'l', 'L');
+
+    strip_sizer->AddStretchSpacer(1);
+    strip_sizer->Add(
+        new SpekMetalButton(
+            strip, wxArtProvider::GetBitmap(ART_HELP, wxART_TOOLBAR), _("Help"),
+            [this]() {
+                wxCommandEvent evt(wxEVT_MENU, wxID_HELP);
+                this->ProcessWindowEvent(evt);
+            }),
+        0, wxEXPAND);
+    strip_sizer->AddSpacer(FromDIP(4));
+    strip->SetSizer(strip_sizer);
+    sizer->Add(strip, 0, wxEXPAND);
 
     // wxInfoBar is too limited, construct a custom one.
     wxPanel *info_bar = new wxPanel(this);
@@ -137,54 +191,10 @@ SpekWindow::SpekWindow(int width, int height, const wxString& path, const wxStri
     info_bar->SetSizer(info_sizer);
     sizer->Add(info_bar, 0, wxEXPAND);
 
-    // Buttons that do the same as the keys handled by the spectrogram.
-    for (int i = 0; i < 2; ++i) {
-        this->channel_buttons[i] = NULL;
-        this->stream_buttons[i] = NULL;
-    }
-    wxPanel *controls = new wxPanel(this);
-    wxSizer *controls_sizer = new wxWrapSizer(wxHORIZONTAL);
-    this->add_control(
-        controls, controls_sizer, _("Channel"),
-        "<", _("Previous channel") + " (Shift+C)", 'C',
-        ">", _("Next channel") + " (C)", 'c',
-        this->channel_buttons);
-    this->add_control(
-        controls, controls_sizer, _("Stream"),
-        "<", _("Previous stream") + " (Shift+S)", 'S',
-        ">", _("Next stream") + " (S)", 's',
-        this->stream_buttons);
-    this->add_control(
-        controls, controls_sizer, _("Window"),
-        "<", _("Previous window function") + " (Shift+F)", 'F',
-        ">", _("Next window function") + " (F)", 'f',
-        NULL);
-    this->add_control(
-        controls, controls_sizer, _("Palette"),
-        "<", _("Previous palette") + " (Shift+P)", 'P',
-        ">", _("Next palette") + " (P)", 'p',
-        NULL);
-    this->add_control(
-        controls, controls_sizer, _("FFT size"),
-        "-", _("Smaller FFT window") + " (Shift+W)", 'W',
-        "+", _("Larger FFT window") + " (W)", 'w',
-        NULL);
-    this->add_control(
-        controls, controls_sizer, _("Upper dB"),
-        "-", _("Lower the upper limit of the range") + " (Shift+U)", 'U',
-        "+", _("Raise the upper limit of the range") + " (U)", 'u',
-        NULL);
-    this->add_control(
-        controls, controls_sizer, _("Lower dB"),
-        "-", _("Lower the lower limit of the range") + " (Shift+L)", 'L',
-        "+", _("Raise the lower limit of the range") + " (L)", 'l',
-        NULL);
-    controls->SetSizer(controls_sizer);
-    sizer->Add(controls, 0, wxEXPAND);
-
     this->spectrogram = new SpekSpectrogram(this);
     sizer->Add(this->spectrogram, 1, wxEXPAND);
-    this->update_controls();
+    this->spectrogram->set_on_change([this]() { this->update_strip(); });
+    this->update_strip();
 
     this->cur_dir = wxGetHomeDir();
 
@@ -213,60 +223,63 @@ void SpekWindow::open(const wxString& path)
         SetTitle(title);
 
         this->spectrogram->open(path, this->pngpath);
-        this->update_controls();
+        this->update_strip();
     }
 }
 
-// Adds "label [back] [forward]" to `sizer`. Pressing a button is the same as
-// pressing the key, see SpekSpectrogram::handle_key(). If `buttons` is not NULL,
-// the two buttons are stored there so they can be enabled/disabled later.
-void SpekWindow::add_control(
-    wxWindow *parent, wxSizer *sizer, const wxString& label,
-    const wxString& back_text, const wxString& back_tip, int back_key,
-    const wxString& fwd_text, const wxString& fwd_tip, int fwd_key,
-    wxButton **buttons)
+// Shows the current settings in the LCD readouts. The channel and stream
+// readouts are disabled unless the file has several of them.
+void SpekWindow::update_strip()
 {
-    wxSizer *group = new wxBoxSizer(wxHORIZONTAL);
-    group->Add(
-        new wxStaticText(parent, wxID_ANY, label),
-        0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 4);
+    const SpekSpectrogram *s = this->spectrogram;
 
-    const wxString texts[2] = {back_text, fwd_text};
-    const wxString tips[2] = {back_tip, fwd_tip};
-    const int keys[2] = {back_key, fwd_key};
-    for (int i = 0; i < 2; ++i) {
-        wxButton *button = new wxButton(
-            parent, wxID_ANY, texts[i], wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-        button->SetToolTip(tips[i]);
-        int key = keys[i];
-        button->Bind(wxEVT_BUTTON, [this, key](wxCommandEvent&) {
-            this->spectrogram->handle_key(key);
-            this->update_controls();
-            // Give the focus back so the keyboard keeps working.
-            this->spectrogram->SetFocus();
-        });
-        group->Add(button, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 2);
-        if (buttons) {
-            buttons[i] = button;
-        }
+    const int channels = s->get_channels();
+    this->lcds[0]->set_value(
+        channels ? wxString::Format("CH %d/%d", s->get_channel() + 1, channels) : wxString("CH -"));
+    this->lcds[0]->Enable(channels > 1);
+
+    const int streams = s->get_streams();
+    this->lcds[1]->set_value(
+        streams ? wxString::Format("ST %d/%d", s->get_stream() + 1, streams) : wxString("ST -"));
+    this->lcds[1]->Enable(streams > 1);
+
+    wxString window, window_name;
+    switch (s->get_window_function()) {
+    case WINDOW_HAMMING:
+        window = "HAMM";
+        window_name = _("Hamming");
+        break;
+    case WINDOW_BLACKMAN_HARRIS:
+        window = "BLKH";
+        window_name = _("Blackman-Harris");
+        break;
+    default:
+        window = "HANN";
+        window_name = _("Hann");
+        break;
     }
+    this->lcds[2]->set_value(window, _("Window function") + ": " + window_name);
 
-    sizer->Add(group, 0, wxALL, 4);
-}
-
-// Channel and stream buttons do nothing unless the file has several of them.
-void SpekWindow::update_controls()
-{
-    bool has_channels = this->spectrogram->get_channels() > 1;
-    bool has_streams = this->spectrogram->get_streams() > 1;
-    for (int i = 0; i < 2; ++i) {
-        if (this->channel_buttons[i]) {
-            this->channel_buttons[i]->Enable(has_channels);
-        }
-        if (this->stream_buttons[i]) {
-            this->stream_buttons[i]->Enable(has_streams);
-        }
+    wxString palette, palette_name;
+    switch (s->get_palette()) {
+    case PALETTE_SOX:
+        palette = "SOX";
+        palette_name = _("Sox");
+        break;
+    case PALETTE_MONO:
+        palette = "MONO";
+        palette_name = _("Mono");
+        break;
+    default:
+        palette = "SPEC";
+        palette_name = _("Spectrum");
+        break;
     }
+    this->lcds[3]->set_value(palette, _("Palette") + ": " + palette_name);
+
+    this->lcds[4]->set_value(wxString::Format("FFT %d", 1 << s->get_fft_bits()));
+    this->lcds[5]->set_value(wxString::Format("MAX %d", s->get_urange()));
+    this->lcds[6]->set_value(wxString::Format("MIN %d", s->get_lrange()));
 }
 
 // TODO: s/audio/media/

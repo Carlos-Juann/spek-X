@@ -40,6 +40,8 @@ spek_SOURCES = \
 	spek-ruler.h \
 	spek-spectrogram.cc \
 	spek-spectrogram.h \
+	spek-strip.cc \
+	spek-strip.h \
 	spek-window.cc \
 	spek-window.h \
 	spek.cc

@@ -182,6 +182,9 @@ bool SpekSpectrogram::handle_key(int key_code)
 
     start();
     Refresh();
+    if (this->on_change) {
+        this->on_change();
+    }
     return true;
 }
 
@@ -456,6 +459,10 @@ void SpekSpectrogram::start()
         this->channels = spek_pipeline_channels(this->pipeline);
         this->duration = spek_pipeline_duration(this->pipeline);
         this->sample_rate = spek_pipeline_sample_rate(this->pipeline);
+        // The number of channels and streams is known only now.
+        if (this->on_change) {
+            this->on_change();
+        }
     } else {
         this->image.Create(1, 1);
     }

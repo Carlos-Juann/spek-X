@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 
 #include <wx/wx.h>
@@ -21,7 +22,16 @@ public:
     void save(const wxString& path);
     bool handle_key(int key_code);
     int get_streams() const { return streams; }
+    int get_stream() const { return stream; }
     int get_channels() const { return channels; }
+    int get_channel() const { return channel; }
+    enum window_function get_window_function() const { return window_function; }
+    enum palette get_palette() const { return palette; }
+    int get_fft_bits() const { return fft_bits; }
+    int get_urange() const { return urange; }
+    int get_lrange() const { return lrange; }
+    // Called after a key (or a button) changes any of the settings above.
+    void set_on_change(std::function<void()> callback) { on_change = callback; }
 
 private:
     void on_char(wxKeyEvent& evt);
@@ -69,6 +79,7 @@ private:
     int fft_bits;
     int urange;
     int lrange;
+    std::function<void()> on_change;
 
     DECLARE_EVENT_TABLE()
 };
